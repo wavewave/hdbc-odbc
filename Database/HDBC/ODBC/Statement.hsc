@@ -369,13 +369,20 @@ getBindCols sstate cstmt = do
 
 -- This is only for String data. For binary fix should be very easy. Just check the column type and use buflen instead of buflen - 1
 getLongColData cstmt bindCol = do
-   let (BindColString buf bufLen col) = bindCol
-   hdbcTrace $ "buflen: " ++ show bufLen
-   bs <- B.packCStringLen (buf, fromIntegral (bufLen - 1))
-   hdbcTrace $ "sql_no_total col " ++ show (BUTF8.toString bs)
-   bs2 <- getRestLongColData cstmt #{const SQL_CHAR} col bs
-   return $ SqlByteString bs2
-
+   case bindCol of
+     BindColString buf bufLen col -> do
+       hdbcTrace $ "buflen: " ++ show bufLen
+       bs <- B.packCStringLen (buf, fromIntegral (bufLen - 1))
+       hdbcTrace $ "sql_no_total col " ++ show (BUTF8.toString bs)
+       bs2 <- getRestLongColData cstmt #{const SQL_CHAR} col bs
+       return $ SqlByteString bs2
+     BindColWString buf bufLen col -> do
+       hdbcTrace $ "buflen: " ++ show bufLen
+       bs <- B.packCStringLen ((castPtr buf), fromIntegral (bufLen - 1))
+       hdbcTrace $ "sql_no_total col " ++ show (BUTF8.toString bs)
+       bs2 <- getRestLongColData cstmt #{const SQL_CHAR} col bs
+       return $ SqlByteString bs2
+     _ -> error ("In Database.HDBC.ODBC.Statement.getLongColData: bindCol = " ++ show bindCol)
 
 getRestLongColData cstmt cBinding icol acc = do
   hdbcTrace "getLongColData"
@@ -466,7 +473,7 @@ data BindCol
   | BindColTime    (Ptr StructTime)
   | BindColTimestamp (Ptr StructTimestamp)
   | BindColGetData #{type SQLUSMALLINT}
-
+  deriving (Show)
 
 -- Intervals and GUIDs have not been implemented, since there is no
 -- equivalent SqlValue for these.
